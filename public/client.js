@@ -8,6 +8,9 @@ var remoteVideo = document.getElementById("remoteVideo");
 var btnMute = document.getElementById("mute");
 var listAudioEvents = document.getElementById("audioEvents");
 
+var inputVolume = document.getElementById("volume");
+var inputPan = document.getElementById("pan");
+
 // variables
 var roomNumber = 'webrtc-audio-demo';
 var localStream;
@@ -25,12 +28,32 @@ var iceServers = {
 var streamConstraints;
 var isCaller;
 
+//Create AudioContext
+const audioContext = new AudioContext();
+var localGainNode, remoteGainNode, remotePannerNode;
+
 // Let's do this
 var socket = io();
 
 btnGoBoth.onclick = () => initiateCall(true);
 btnGoVideoOnly.onclick = () => initiateCall(false);
 btnMute.onclick = toggleAudio;
+
+inputVolume.oninput = function () {
+    var volume = parseFloat(this.value);
+    console.log("volume", volume);
+    if (remoteGainNode) {
+        remoteGainNode.gain.value = volume;
+    }
+}
+
+inputPan.oninput = function () {
+    var value = parseFloat(this.value);
+    console.log("pan", value);
+    if (remotePannerNode) {
+        remotePannerNode.pan.setValueAtTime(value, audioContext.currentTime);
+    }
+}
 
 function initiateCall(audio) {
     streamConstraints = {
@@ -45,7 +68,18 @@ function initiateCall(audio) {
 // message handlers
 socket.on('created', function (room) {
     navigator.mediaDevices.getUserMedia(streamConstraints).then(function (stream) {
+        console.log("created");
+        const sourceNode = audioContext.createMediaStreamSource(stream);
+        //set up a gain node
+        localGainNode = audioContext.createGain();
+
         addLocalStream(stream);
+        // connect the source to the gain node
+        sourceNode.connect(localGainNode);
+        //connect the gain node to the destination
+        localGainNode.connect(audioContext.destination);
+
+        localGainNode.gain.value = 0;
         isCaller = true;
     }).catch(function (err) {
         console.log('An error ocurred when accessing media devices');
@@ -114,10 +148,35 @@ function onIceCandidate(event) {
 }
 
 function onAddStream(event) {
+    console.log("onAddStream", event)
     remoteVideo.srcObject  = event.stream;
     remoteStream = event.stream;
+    remoteVideo.muted = true;
+
     if (remoteStream.getAudioTracks().length > 0) {
+        const audioTrack = remoteStream.getAudioTracks()[0];
+        console.log("audioTrack", audioTrack);
         addAudioEvent('Remote user is sending Audio');
+
+        //Following lines will do the workaround:
+        var audioObj = document.createElement("AUDIO");
+        audioObj.srcObject = remoteStream;
+        audioObj = null;
+
+        const sourceNode = audioContext.createMediaStreamSource(remoteStream);
+        remoteGainNode = audioContext.createGain();
+        // connect the source to the gain node
+        sourceNode.connect(remoteGainNode);
+        //connect the gain node to the destination
+        remoteGainNode.connect(audioContext.destination);
+
+        remotePannerNode = audioContext.createStereoPanner();
+        // connect the source to the panner node
+        sourceNode.connect(remotePannerNode);
+        //connect the panner node to the destination
+        remotePannerNode.connect(audioContext.destination);
+
+
     } else {
         addAudioEvent('Remote user is not sending Audio');
     }
@@ -145,6 +204,7 @@ function setLocalAndAnswer(sessionDescription) {
 function addLocalStream(stream) {
     localStream = stream;
     localVideo.srcObject = stream
+    localVideo.muted = true;
 
     if (stream.getAudioTracks().length > 0) {
         btnMute.style = "display: block";
