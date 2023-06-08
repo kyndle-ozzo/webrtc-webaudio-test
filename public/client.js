@@ -9,6 +9,7 @@ var btnMute = document.getElementById("mute");
 var listAudioEvents = document.getElementById("audioEvents");
 
 var inputVolume = document.getElementById("volume");
+var inputLocalVolume = document.getElementById("localvolume");
 var inputPan = document.getElementById("pan");
 
 // variables
@@ -47,6 +48,14 @@ inputVolume.oninput = function () {
     }
 }
 
+inputLocalVolume.oninput = function () {
+    var volume = parseFloat(this.value);
+    console.log("local volume", volume);
+    if (localGainNode) {
+        localGainNode.gain.value = volume;
+    }
+}
+
 inputPan.oninput = function () {
     var value = parseFloat(this.value);
     console.log("pan", value);
@@ -73,7 +82,7 @@ socket.on('created', function (room) {
         //set up a gain node
         localGainNode = audioContext.createGain();
 
-        addLocalStream(stream);
+        // addLocalStream(stream);
         // connect the source to the gain node
         sourceNode.connect(localGainNode);
         //connect the gain node to the destination
